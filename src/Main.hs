@@ -1,24 +1,57 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
 import Control.Applicative
 import Control.Monad
-import Database.SQLite.Simple ()
-import GHC.RTS.Events ()
 import Options.Applicative
 
+import GHC.RTS.Events.SQLite (indexing, querying)
+
 main :: IO ()
-main = do
-    join $ execParser (info opts idm)
+main = execParser opts >>= \case
+    IndexEvents eventlog db -> indexing eventlog db
+    QueryEvents db          -> querying db
 
-opts :: Parser (IO ())
-opts = subparser $
-       command "index" (info (index <$> argument str idm) idm)
-    <> command "query" (info (pure query) idm)
+-------------------------------------------------------------------------------
+-- Data types
 
-index :: String -> IO ()
-index arg = putStrLn $ "index arg: " <> arg
+data Command
+    = IndexEvents FilePath FilePath
+    | QueryEvents FilePath
+    deriving (Show)
 
-query :: IO ()
-query = putStrLn $ "query..."
+-------------------------------------------------------------------------------
+-- Options parser
+
+opts :: ParserInfo Command
+opts = info (cmds <**> helper) helpOpt
+  where
+    cmds = subparser $
+           command "index" (info indexOpt (progDesc "Indexing eventlog to SQLite DB."))
+        <> command "query" (info queryOpt (progDesc "Querying from the SQLite DB."))
+
+    indexOpt :: Parser Command
+    indexOpt = IndexEvents
+        <$> strOption
+             ( long "eventlog"
+            <> short 'e'
+            <> metavar "EVENTLOG"
+            <> help "Location of eventlog file")
+        <*> strOption
+             ( long "db"
+            <> short 'd'
+            <> metavar "DB"
+            <> help "Location of the DB file")
+
+    queryOpt :: Parser Command
+    queryOpt = QueryEvents
+        <$> strOption
+             ( long "db"
+            <> short 'd'
+            <> metavar "DB"
+            <> help "Location of the DB file")
+
+    helpOpt = fullDesc
+           <> progDesc "Manipulate GHC eventlog with SQLite"
+           <> header "ghc-events-sqlite"
